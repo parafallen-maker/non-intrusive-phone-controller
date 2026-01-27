@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>开发者工具 - AutoGLM S3</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🤖</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #111827;
+            --border: #1f2937;
+            --primary: #22d3ee;
+            --primary-dark: #0ea5e9;
+            --text: #e5e7eb;
+            --text-sub: #9ca3af;
+            --danger: #f87171;
+            --success: #34d399;
+            --card-radius: 12px;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
+        }
+        a { color: var(--primary); text-decoration: none; }
+        .layout {
+            display: grid;
+            grid-template-columns: 320px 1fr 320px;
+            gap: 16px;
+            padding: 16px;
+            height: 100vh;
+        }
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: var(--card-radius);
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 0 10px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 10px;
+        }
+        .panel-title {
+            font-weight: 600;
+            font-size: 15px;
+        }
+        .section-title {
+            font-size: 13px;
+            color: var(--text-sub);
+            margin: 12px 0 6px;
+        }
+        .field {
+            margin-bottom: 10px;
+        }
+        .label {
+            font-size: 12px;
+            color: var(--text-sub);
+            margin-bottom: 4px;
+            display: block;
+        }
+        input, select, button, textarea {
+            font-family: inherit;
+        }
+        input, select, textarea {
+            width: 100%;
+            background: #0b1220;
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 13px;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: 1px solid var(--primary);
+        }
+        textarea { resize: vertical; min-height: 60px; }
+        .btn {
+            background: var(--primary);
+            color: #0b1220;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.15s ease;
+            font-size: 13px;
+        }
+        .btn.secondary {
+            background: #1f2937;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .btn.btn-success {
+            background: #10b981;
+            color: white;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+        .btn.block { width: 100%; }
+        .btn:hover { filter: brightness(1.05); }
+        .flex { display: flex; gap: 8px; }
+        .flex-col { display: flex; flex-direction: column; gap: 8px; }
+        .split { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+        .log {
+            flex: 1;
+            background: #0b1220;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 12px;
+            color: var(--text-sub);
+            overflow-y: auto;
+        }
+        .log-line { margin-bottom: 6px; }
+        .log-line .time { color: #6b7280; margin-right: 6px; }
+        .log-line.ok { color: var(--success); }
+        .log-line.warn { color: #fbbf24; }
+        .log-line.err { color: var(--danger); }
+        .preview {
+            flex: 1;
+            border: 1px solid var(--border);
+            border-radius: var(--card-radius);
+            background: #0b1220;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: crosshair;
+            pointer-events: auto;
+            user-select: none;
+        }
+        .preview img { 
+            max-height: 90%;
+            max-width: 90%;
+            object-fit: contain;
+            pointer-events: none; 
+            display: block;
+        }
+        .preview .placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-sub);
+            font-size: 13px;
+        }
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .tool-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 10px;
+            background: #1f2937;
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .tool-btn.active {
+            background: #0ea5e9;
+            color: #0b1220;
+            border-color: #0ea5e9;
+        }
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 999px; display: inline-block;
+            background: var(--danger); margin-right: 6px;
+        }
+        .status-dot.ok { background: var(--success); }
+        .badge {
+            padding: 4px 8px;
+            background: #1f2937;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 12px;
+            color: var(--text-sub);
+        }
+        .badge.connected {
+            background: rgba(34, 211, 238, 0.1);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .badge.error {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--danger);
+            color: var(--danger);
+            animation: pulse-error 2s infinite;
+        }
+        @keyframes pulse-error {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .row-between { display: flex; align-items: center; justify-content: space-between; }
+        .small { font-size: 12px; color: var(--text-sub); }
+        .scroll { overflow-y: auto; }
+        
+        /* 点击反馈动画 */
+        @keyframes ripple {
+            0% {
+                transform: scale(0.5);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+        
+        /* 预览区域鼠标样式 */
+        .preview {
+            cursor: crosshair;
+        }
+        .preview.tool-swipe {
+            cursor: move;
+        }
+        .preview.tool-long_press {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <!-- 左侧：设备与参数 -->
+        <div class="panel" id="leftPanel">
+            <div class="panel-header">
+                <div class="panel-title">设备连接</div>
+                <div class="badge" id="apiStatus"><span class="status-dot"></span>API</div>
+            </div>
+
+            <div class="section-title">1. 设备选择</div>
+            <div class="field">
+                <label class="label">IP 地址</label>
+                <div class="flex">
+                    <input id="manualIP" placeholder="192.168.x.x" value="">
+                    <button class="btn" style="min-width:90px" onclick="connectManual()">手动连接</button>
+                </div>
+            </div>
+            <div class="field">
+                <button class="btn secondary block" onclick="scanDevices()">扫描局域网设备</button>
+            </div>
+            <div id="deviceList" class="log" style="height:140px;">点击扫描或手动输入 IP</div>
+            <div id="currentDevice" style="display:none; margin-top:10px; padding:10px; background:#1f2937; border:1px solid var(--border); border-radius:8px; font-size:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div><span style="color:var(--text-sub);">当前设备:</span> <span id="currentDeviceIP" style="color:var(--primary); font-weight:600;"></span></div>
+                    <button class="btn secondary" style="padding:4px 8px; font-size:11px;" onclick="disconnectDevice()">断开</button>
+                </div>
+            </div>
+
+            <div class="section-title">2. 屏幕截图</div>
+            <div class="split">
+                <button class="btn block" id="autoRefreshBtn" onclick="toggleAutoRefresh()">获取屏幕</button>
+                <button class="btn secondary block" onclick="clearLogs()">清空日志</button>
+            </div>
+            <div class="field">
+                <label>旋转角度</label>
+                <select id="rotationSelect" style="width:100%; padding:8px; background:#1f2937; border:1px solid var(--border); color:var(--text); border-radius:6px;">
+                    <option value="0">0°（原始）</option>
+                    <option value="1">90°</option>
+                    <option value="2" selected>180°</option>
+                    <option value="3">270°</option>
+                </select>
+            </div>
+            <div class="section-title">3. 操作工具</div>
+            <div class="toolbar">
+                <div class="tool-btn active" id="tool-tap" onclick="setTool('tap')">👆 点击</div>
+                <div class="tool-btn" id="tool-double_tap" onclick="setTool('double_tap')">✌️ 双击</div>
+                <div class="tool-btn" id="tool-long_press" onclick="setTool('long_press')">⏳ 长按</div>
+                <div class="tool-btn" id="tool-swipe" onclick="setTool('swipe')">↔️ 滑动</div>
+            </div>
+            <div class="section-title">4. 文本指令 (TTS)</div>
+            <div class="field">
+                <textarea id="ttsText" placeholder="请输入播报内容"></textarea>
+            </div>
+            <div class="split">
+                <button class="btn block" onclick="sendTTS()">发送播报</button>
+                <button class="btn secondary block" onclick="stopTTS()">停止播报</button>
+            </div>
+        </div>
+
+        <!-- 中间：预览区 -->
+        <div class="panel" id="centerPanel">
+            <div class="panel-header">
+                <div class="panel-title">屏幕预览 (实时交互)</div>
+                <div class="small" id="coordDisplay">X: 0.00 Y: 0.00</div>
+            </div>
+            <div class="preview" id="screenContainer">
+                <div class="placeholder" id="screenPlaceholder">等待截图...</div>
+                <img id="screenImg" src="" style="display:none" draggable="false">
+                <div id="swipeOverlay" style="position:absolute; inset:0; pointer-events:none;"></div>
+            </div>
+            <div style="margin-top:12px; display:flex; gap:12px; align-items:center;">
+                <button class="btn" style="flex:0 0 auto; padding:10px 20px;" onclick="executeArmHome()">🏠 机械臂归位</button>
+                <div style="flex:1; display:flex; gap:8px; align-items:center; padding:10px 12px; background:#1f2937; border:1px solid var(--border); border-radius:8px;">
+                    <span style="color:var(--text-sub); font-size:12px;">机械臂状态:</span>
+                    <span id="armStatus" style="color:var(--primary); font-weight:600; font-size:12px;">未知</span>
+                    <span style="margin-left:auto; color:var(--text-sub); font-size:11px;" id="armPosition">位置: -</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：日志区 -->
+        <div class="panel" id="rightPanel">
+            <div class="panel-header">
+                <div class="panel-title">识别结果 / 日志</div>
+                <div class="badge" id="deviceBadge">未连接</div>
+            </div>
+            <div class="log" id="logConsole"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080';
+        let selectedDevice = '';
+        let eventSource = null;
+        let currentTool = 'tap';
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        let longPressTimer = null;
+        let longPressTriggered = false;
+        let lastTapTime = 0;
+        let lastTapX = 0;
+        let lastTapY = 0;
+
+        window.onload = function() {
+            checkAPIStatus();
+            connectLogStream();
+            setupScreenInteraction();
+            addLog('等待操作...');
+        };
+
+        function setTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tool-${tool}`).classList.add('active');
+            
+            // 更新预览区域的鼠标样式
+            const preview = document.getElementById('screenContainer');
+            preview.className = 'preview tool-' + tool;
+            
+            addLog(`切换工具: ${tool}`);
+        }
+
+        function addLog(msg, level='info') {
+            const log = document.getElementById('logConsole');
+            const line = document.createElement('div');
+            line.className = 'log-line ' + (level === 'error' ? 'err' : level === 'warn' ? 'warn' : 'ok');
+            const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+            line.innerHTML = `<span class="time">[${time}]</span>${msg}`;
+            log.appendChild(line);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function clearLogs() { document.getElementById('logConsole').innerHTML = ''; }
+
+        async function checkAPIStatus() {
+            const badge = document.getElementById('apiStatus');
+            try {
+                await fetch(`${API_BASE}/api/health`);
+                badge.innerHTML = '<span class="status-dot ok"></span>API 正常';
+            } catch {
+                badge.innerHTML = '<span class="status-dot"></span>API 离线';
+            }
+        }
+
+        function connectLogStream() {
+            if (eventSource) eventSource.close();
+            eventSource = new EventSource(`${API_BASE}/api/telemetry/stream`);
+            eventSource.onmessage = (ev) => {
+                try {
+                    const log = JSON.parse(ev.data);
+                    addLog(log.message, log.level.toLowerCase());
+                } catch {}
+            };
+        }
+
+        async function scanDevices() {
+            addLog('开始扫描局域网...');
+            try {
+                const res = await fetch(`${API_BASE}/api/scan`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ port: 8888 })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    renderDeviceList(data.devices);
+                    addLog(`扫描完成，发现 ${data.devices.length} 个设备`);
+                } else {
+                    addLog('扫描失败: ' + data.message, 'error');
+                }
+            } catch (e) {
+                addLog('扫描异常: ' + e.message, 'error');
+            }
+        }
+
+        function renderDeviceList(devices) {
+            const list = document.getElementById('deviceList');
+            if (!devices.length) {
+                list.innerHTML = '未发现设备';
+                return;
+            }
+            list.innerHTML = '';
+            devices.forEach(ip => {
+                const div = document.createElement('div');
+                div.className = 'log-line';
+                div.style.cursor = 'pointer';
+                div.textContent = ip;
+                div.onclick = () => selectDevice(ip);
+                list.appendChild(div);
+            });
+        }
+
+        function selectDevice(ip) {
+            selectedDevice = ip;
+            const badge = document.getElementById('deviceBadge');
+            badge.innerHTML = '<span class="status-dot ok"></span>' + ip;
+            badge.classList.add('connected');
+            
+            // 显示当前设备信息
+            document.getElementById('currentDevice').style.display = 'block';
+            document.getElementById('currentDeviceIP').textContent = ip;
+            
+            // 立即检查连接状态
+            checkDeviceConnection();
+            
+            addLog(`已连接设备: ${ip}`, 'ok');
+        }
+
+        function disconnectDevice() {
+            if (!selectedDevice) return;
+            
+            const oldDevice = selectedDevice;
+            selectedDevice = '';
+            
+            // 重置 badge
+            const badge = document.getElementById('deviceBadge');
+            badge.innerHTML = '未连接';
+            badge.classList.remove('connected');
+            
+            // 隐藏当前设备信息
+            document.getElementById('currentDevice').style.display = 'none';
+            
+            // 清除截图
+            const img = document.getElementById('screenImg');
+            const placeholder = document.getElementById('screenPlaceholder');
+            img.style.display = 'none';
+            placeholder.style.display = 'flex';
+            img.src = '';
+            
+            addLog(`已断开设备: ${oldDevice}`, 'warn');
+        }
+
+        function connectManual() {
+            const ip = document.getElementById('manualIP').value.trim();
+            if (!ip) return;
+            selectDevice(ip);
+        }
+
+        let autoRefreshInterval = null;
+        let isAutoRefreshing = false;
+
+        async function refreshScreenshot(silent = false) {
+            if (!selectedDevice) return addLog('请先选择设备', 'warn');
+            const img = document.getElementById('screenImg');
+            const placeholder = document.getElementById('screenPlaceholder');
+            try {
+                const startTime = Date.now();
+                const rotationValue = document.getElementById('rotationSelect').value;
+                const requestBody = { 
+                    device_ip: selectedDevice,
+                    rotation: parseInt(rotationValue)
+                };
+                
+                // 打印请求信息
+                console.log('[截图请求]', requestBody);
+                addLog(`📤 发送截图请求: 设备=${selectedDevice}, 旋转=${rotationValue}`);
+                
+                const res = await fetch(`${API_BASE}/api/s3/screenshot`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                // 打印响应状态
+                console.log('[截图响应] 状态码:', res.status, res.statusText);
+                addLog(`📥 收到响应: HTTP ${res.status}`);
+                
+                const data = await res.json();
+                const duration = Date.now() - startTime;
+                
+                // 打印响应数据
+                console.log('[截图数据]', data);
+                addLog(`📊 响应数据: ${JSON.stringify(data)}`);
+                
+                if (data.success && data.path) {
+                    // 添加时间戳避免缓存
+                    const timestamp = Date.now();
+                    const imgUrl = `${API_BASE}/${data.path}?t=${timestamp}`;
+                    
+                    console.log('[图片加载] URL:', imgUrl);
+                    addLog(`🖼️ 开始加载图片: ${imgUrl}`);
+                    
+                    // 创建新的图片对象来预加载
+                    const newImg = new Image();
+                    newImg.onload = function() {
+                        console.log('[图片加载] 成功', {
+                            naturalWidth: newImg.naturalWidth,
+                            naturalHeight: newImg.naturalHeight
+                        });
+                        // 确保容器启用事件
+                        const container = document.getElementById('screenContainer');
+                        container.style.pointerEvents = 'auto';
+                        
+                        // 更新主图像
+                        img.src = imgUrl;
+                        img.style.display = 'block';
+                        img.style.pointerEvents = 'none';
+                        placeholder.style.display = 'none';
+                        
+                        addLog(`✓ 图片已加载 (${newImg.naturalWidth}×${newImg.naturalHeight}px)`, 'ok');
+                    };
+                    newImg.onerror = function() {
+                        console.error('[图片加载] 失败');
+                        addLog('✗ 图片加载失败', 'error');
+                        // 确保容器仍然可交互
+                        const container = document.getElementById('screenContainer');
+                        container.style.pointerEvents = 'auto';
+                    };
+                    
+                    newImg.src = imgUrl;
+                    
+                    if (!silent) {
+                        addLog(`✓ 截图成功 (耗时${duration}ms, 旋转${rotationValue}×90°)`, 'ok');
+                    }
+                } else {
+                    console.error('[截图失败]', data);
+                    addLog(`✗ 截图失败: ${data.error || data.message || '未知错误'}`, 'error');
+                }
+            } catch (e) {
+                console.error('[截图异常]', e);
+                addLog('✗ 截图错误: ' + e.message, 'error');
+            }
+        }
+
+        function toggleAutoRefresh() {
+            const btn = document.getElementById('autoRefreshBtn');
+            
+            if (isAutoRefreshing) {
+                // 停止自动刷新
+                console.log('Stopping auto refresh, interval:', autoRefreshInterval);
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+                isAutoRefreshing = false;
+                btn.textContent = '获取屏幕';
+                btn.classList.remove('btn-success');
+                addLog('✓ 已停止自动刷新', 'ok');
+            } else {
+                // 启动自动刷新
+                if (!selectedDevice) {
+                    addLog('请先选择设备', 'warn');
+                    return;
+                }
+                
+                isAutoRefreshing = true;
+                btn.textContent = '⏸ 停止刷新';
+                btn.classList.add('btn-success');
+                addLog('✓ 已启动自动刷新（每2秒）', 'ok');
+                
+                // 立即截图一次
+                refreshScreenshot(false); // 显示日志
+                
+                // 每2秒刷新，静默模式避免刷屏
+                autoRefreshInterval = setInterval(() => {
+                    refreshScreenshot(true); // 静默模式
+                }, 2000);
+                console.log('Started auto refresh, interval:', autoRefreshInterval);
+            }
+        }
+
+        function setupScreenInteraction() {
+            const container = document.getElementById('screenContainer');
+            const img = document.getElementById('screenImg');
+
+            // 鼠标移动 - 显示坐标
+            container.addEventListener('mousemove', (e) => {
+                if (!img.complete || !img.src) return;
+                const rect = img.getBoundingClientRect();
+                // 原始坐标（屏幕坐标系）
+                const screenX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const screenY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+                
+                // 由于图片逆时针旋转了90度，需要转换坐标
+                // 旋转后: 新X = 原Y, 新Y = 1 - 原X
+                const x = screenY;
+                const y = 1 - screenX;
+                
+                document.getElementById('coordDisplay').textContent = `X: ${x.toFixed(2)} Y: ${y.toFixed(2)}`;
+                
+                // 滑动模式下绘制线条
+                if (isDragging && currentTool === 'swipe') {
+                    drawSwipeLine(x, y);
+                }
+            });
+
+            // 鼠标按下
+            container.addEventListener('mousedown', (e) => {
+                if (!selectedDevice || !img.complete || !img.src) return;
+                e.preventDefault();
+                
+                const rect = img.getBoundingClientRect();
+                // 原始屏幕坐标
+                const screenX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const screenY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+                
+                // 坐标转换（逆时针旋转90度）
+                startX = screenY;
+                startY = 1 - screenX;
+                
+                isDragging = true;
+                longPressTriggered = false;
+                
+                // 显示按下反馈
+                showClickFeedback(e.clientX, e.clientY);
+                
+                // 长按检测
+                if (currentTool === 'long_press') {
+                    longPressTimer = setTimeout(() => {
+                        longPressTriggered = true;
+                        addLog(`长按: (${startX.toFixed(2)}, ${startY.toFixed(2)})`, 'ok');
+                        executeLongPress(startX, startY);
+                    }, 500); // 500ms 触发长按
+                }
+            });
+
+            // 鼠标抬起
+            container.addEventListener('mouseup', (e) => {
+                if (!selectedDevice || !isDragging) return;
+                e.preventDefault();
+                
+                // 清除长按计时器
+                if (longPressTimer) {
+                // 原始屏幕坐标
+                const screenX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const screenY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+                
+                // 坐标转换（逆时针旋转90度）
+                const endX = screenY;
+                const endY = 1 - screenX
+                }
+                
+                isDragging = false;
+                const rect = img.getBoundingClientRect();
+                const endX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const endY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+                
+                clearSwipeLine();
+                
+                // 如果已触发长按，不执行其他操作
+                if (longPressTriggered) {
+                    return;
+                }
+                
+                // 滑动模式
+                if (currentTool === 'swipe') {
+                    const distance = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+                    if (distance > 0.02) { // 最小滑动距离
+                        executeSwipe(startX, startY, endX, endY);
+                    } else {
+                        addLog('滑动距离太短，已忽略', 'warn');
+                    }
+                    return;
+                }
+                
+                // 双击检测
+                if (currentTool === 'double_tap') {
+                    const now = Date.now();
+                    const timeDiff = now - lastTapTime;
+                    const distDiff = Math.sqrt(Math.pow(endX - lastTapX, 2) + Math.pow(endY - lastTapY, 2));
+                    
+                    if (timeDiff < 500 && distDiff < 0.05) {
+                        // 双击触发
+                        executeDoubleTap(endX, endY);
+                        lastTapTime = 0; // 重置
+                    } else {
+                        // 记录第一次点击
+                        lastTapTime = now;
+                        lastTapX = endX;
+                        lastTapY = endY;
+                        addLog('等待第二次点击...', 'warn');
+                    }
+                    return;
+                }
+                
+                // 普通点击
+                if (currentTool === 'tap') {
+                    executeTap(endX, endY);
+                }
+            });
+
+            // 鼠标离开 - 清理状态
+            container.addEventListener('mouseleave', () => {
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+                isDragging = false;
+                clearSwipeLine();
+            });
+        }
+
+        function drawSwipeLine(x2, y2) {
+            const overlay = document.getElementById('swipeOverlay');
+            overlay.innerHTML = '';
+            const rect = document.getElementById('screenImg').getBoundingClientRect();
+            
+            // 起点圆圈
+            const startDot = document.createElement('div');
+            startDot.style.position = 'absolute';
+            startDot.style.width = '12px';
+            startDot.style.height = '12px';
+            startDot.style.borderRadius = '50%';
+            startDot.style.background = '#22d3ee';
+            startDot.style.left = `${startX * rect.width - 6}px`;
+            startDot.style.top = `${startY * rect.height - 6}px`;
+            overlay.appendChild(startDot);
+            
+            // 连接线
+            const line = document.createElement('div');
+            line.style.position = 'absolute';
+            line.style.height = '3px';
+            line.style.background = 'linear-gradient(90deg, #22d3ee, #06b6d4)';
+            line.style.boxShadow = '0 0 10px rgba(34, 211, 238, 0.5)';
+            
+            const x1 = startX * rect.width, y1 = startY * rect.height;
+            const px2 = x2 * rect.width, py2 = y2 * rect.height;
+            const length = Math.hypot(px2 - x1, py2 - y1);
+            const angle = Math.atan2(py2 - y1, px2 - x1) * 180 / Math.PI;
+            
+            line.style.width = `${length}px`;
+            line.style.left = `${x1}px`;
+            line.style.top = `${y1}px`;
+            line.style.transformOrigin = '0 50%';
+            line.style.transform = `rotate(${angle}deg)`;
+            overlay.appendChild(line);
+            
+            // 终点箭头
+            const endArrow = document.createElement('div');
+            endArrow.style.position = 'absolute';
+            endArrow.style.width = '0';
+            endArrow.style.height = '0';
+            endArrow.style.borderLeft = '8px solid #22d3ee';
+            endArrow.style.borderTop = '5px solid transparent';
+            endArrow.style.borderBottom = '5px solid transparent';
+            endArrow.style.left = `${px2}px`;
+            endArrow.style.top = `${py2 - 5}px`;
+            endArrow.style.transformOrigin = '0 50%';
+            endArrow.style.transform = `rotate(${angle}deg)`;
+            overlay.appendChild(endArrow);
+        }
+
+        function clearSwipeLine() {
+            document.getElementById('swipeOverlay').innerHTML = '';
+        }
+
+        function showClickFeedback(clientX, clientY) {
+            const feedback = document.createElement('div');
+            feedback.style.position = 'fixed';
+            feedback.style.left = `${clientX}px`;
+            feedback.style.top = `${clientY}px`;
+            feedback.style.width = '40px';
+            feedback.style.height = '40px';
+            feedback.style.marginLeft = '-20px';
+            feedback.style.marginTop = '-20px';
+            feedback.style.borderRadius = '50%';
+            feedback.style.border = '3px solid #22d3ee';
+            feedback.style.pointerEvents = 'none';
+            feedback.style.animation = 'ripple 0.6s ease-out';
+            feedback.style.zIndex = '9999';
+            
+            document.body.appendChild(feedback);
+            setTimeout(() => feedback.remove(), 600);
+        }
+
+        async function executeTap(x, y) {
+            const requestData = { device_ip: selectedDevice, x, y, count: 1 };
+            console.log('[点击请求]', requestData);
+            addLog(`📤 点击: (${x.toFixed(3)}, ${y.toFixed(3)})`);
+            try {
+                const startTime = Date.now();
+                const res = await fetch(`${API_BASE}/api/s3/tap`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
+                });
+                
+                console.log('[点击响应] 状态码:', res.status, res.statusText);
+                
+                const data = await res.json();
+                const duration = Date.now() - startTime;
+                
+                console.log('[点击结果]', data, `耗时: ${duration}ms`);
+                
+                if (data.success) {
+                    addLog(`✓ 点击成功 (${duration}ms) - ${data.message || ''}`, 'ok');
+                } else {
+                    addLog(`✗ 点击失败 (${duration}ms): ${data.message || '未知错误'}`, 'error');
+                }
+            } catch (e) {
+                console.error('[点击异常]', e);
+                addLog('✗ 点击异常: ' + e.message, 'error');
+            }
+        }
+
+        async function executeDoubleTap(x, y) {
+            const requestData = { device_ip: selectedDevice, x, y, count: 2 };
+            console.log('[双击请求]', requestData);
+            addLog(`📤 双击: (${x.toFixed(3)}, ${y.toFixed(3)})`);
+            try {
+                const startTime = Date.now();
+                const res = await fetch(`${API_BASE}/api/s3/tap`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
+                });
+                
+                console.log('[双击响应] 状态码:', res.status);
+                
+                const data = await res.json();
+                const duration = Date.now() - startTime;
+                
+                console.log('[双击结果]', data, `耗时: ${duration}ms`);
+                
+                if (data.success) {
+                    addLog(`✓ 双击成功 (${duration}ms)`, 'ok');
+                } else {
+                    addLog(`✗ 双击失败 (${duration}ms): ${data.message || '未知错误'}`, 'error');
+                }
+            } catch (e) {
+                console.error('[双击异常]', e);
+                addLog('✗ 双击异常: ' + e.message, 'error');
+            }
+        }
+
+        async function executeLongPress(x, y, duration = 1000) {
+            const requestData = { device_ip: selectedDevice, x, y, duration };
+            console.log('[长按请求]', requestData);
+            addLog(`📤 长按: (${x.toFixed(3)}, ${y.toFixed(3)}) ${duration}ms`);
+            try {
+                const startTime = Date.now();
+                const res = await fetch(`${API_BASE}/api/s3/long_press`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
+                });
+                
+                console.log('[长按响应] 状态码:', res.status);
+                
+                const data = await res.json();
+                const elapsed = Date.now() - startTime;
+                
+                console.log('[长按结果]', data, `耗时: ${elapsed}ms`);
+                
+                if (data.success) {
+                    addLog(`✓ 长按成功 (${elapsed}ms)`, 'ok');
+                } else {
+                    addLog(`✗ 长按失败 (${elapsed}ms): ${data.message || '未知错误'}`, 'error');
+                }
+            } catch (e) {
+                console.error('[长按异常]', e);
+                addLog('✗ 长按异常: ' + e.message, 'error');
+            }
+        }
+
+        async function executeSwipe(sx, sy, ex, ey) {
+            const distance = Math.sqrt(Math.pow(ex - sx, 2) + Math.pow(ey - sy, 2));
+            const requestData = { 
+                device_ip: selectedDevice, 
+                start_x: sx, 
+                start_y: sy, 
+                end_x: ex, 
+                end_y: ey 
+            };
+            console.log('[滑动请求]', requestData, `距离: ${distance.toFixed(3)}`);
+            addLog(`📤 滑动: (${sx.toFixed(3)},${sy.toFixed(3)}) → (${ex.toFixed(3)},${ey.toFixed(3)}) 距离:${distance.toFixed(3)}`);
+            try {
+                const startTime = Date.now();
+                const res = await fetch(`${API_BASE}/api/s3/swipe`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
+                });
+                
+                console.log('[滑动响应] 状态码:', res.status);
+                
+                const data = await res.json();
+                const duration = Date.now() - startTime;
+                
+                console.log('[滑动结果]', data, `耗时: ${duration}ms`);
+                
+                if (data.success) {
+                    addLog(`✓ 滑动成功 (${duration}ms)`, 'ok');
+                } else {
+                    addLog(`✗ 滑动失败 (${duration}ms): ${data.message || '未知错误'}`, 'error');
+                }
+            } catch (e) {
+                console.error('[滑动异常]', e);
+                addLog('✗ 滑动异常: ' + e.message, 'error');
+            }
+        }
+
+        async function executeArmHome() {
+            if (!selectedDevice) return addLog('请先选择设备', 'warn');
+            
+            addLog('→ 机械臂归位中...', 'ok');
+            updateArmStatus('归位中...', '-');
+            
+            try {
+                const startTime = Date.now();
+                // 移动到原点 (0, 0)
+                const res = await fetch(`${API_BASE}/api/s3/tap`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_ip: selectedDevice, x: 0, y: 0, count: 0 })
+                });
+                const data = await res.json();
+                const duration = Date.now() - startTime;
+                
+                if (data.success) {
+                    addLog(`✓ 机械臂归位成功 (${duration}ms)`, 'ok');
+                    updateArmStatus('已归位', '(0, 0)');
+                } else {
+                    addLog(`✗ 归位失败 (${duration}ms): ${data.message || '未知错误'}`, 'error');
+                    updateArmStatus('归位失败', '-');
+                }
+            } catch (e) {
+                addLog('✗ 归位异常: ' + e.message, 'error');
+                updateArmStatus('异常', '-');
+            }
+        }
+
+        function updateArmStatus(status, position) {
+            document.getElementById('armStatus').textContent = status;
+            document.getElementById('armPosition').textContent = `位置: ${position}`;
+        }
+
+        // 检查设备连接状态
+        let connectionCheckFailures = 0;
+        const MAX_FAILURES = 2; // 连续2次失败才判定为离线
+
+        async function checkDeviceConnection() {
+            if (!selectedDevice) return;
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/s3/status?device_ip=${selectedDevice}`, {
+                    timeout: 5000
+                });
+                const data = await res.json();
+                
+                if (data.success && data.data) {
+                    // 连接正常，重置失败计数
+                    connectionCheckFailures = 0;
+                    
+                    // 更新badge为在线状态
+                    const badge = document.getElementById('deviceBadge');
+                    badge.innerHTML = '<span class="status-dot ok"></span>' + selectedDevice;
+                    badge.classList.add('connected');
+                    badge.classList.remove('error');
+                    
+                    // 更新机械臂状态
+                    const status = data.data;
+                    const armConnected = status.serial_connected ? '已连接' : '未连接';
+                    const armInfo = status.serial_status || '空闲';
+                    updateArmStatus(armConnected, armInfo);
+                } else {
+                    handleConnectionFailure();
+                }
+            } catch (e) {
+                handleConnectionFailure();
+            }
+        }
+
+        function handleConnectionFailure() {
+            connectionCheckFailures++;
+            
+            if (connectionCheckFailures >= MAX_FAILURES) {
+                // 设备离线
+                const badge = document.getElementById('deviceBadge');
+                badge.innerHTML = '<span class="status-dot error"></span>' + selectedDevice + ' (离线)';
+                badge.classList.remove('connected');
+                badge.classList.add('error');
+                
+                updateArmStatus('设备离线', '-');
+                
+                if (connectionCheckFailures === MAX_FAILURES) {
+                    addLog(`⚠️ 设备 ${selectedDevice} 已离线`, 'error');
+                }
+            }
+        }
+
+        // 定期检查设备连接和更新机械臂状态
+        setInterval(() => {
+            if (selectedDevice) {
+                checkDeviceConnection();
+            }
+        }, 3000); // 每3秒检查一次
+
+        async function executeCommand(cmd) {
+            if (!selectedDevice) return addLog('请先选择设备', 'warn');
+            
+            addLog(`执行命令: ${cmd}`);
+            
+            try {
+                let endpoint = '';
+                let body = { device_ip: selectedDevice };
+                
+                switch(cmd) {
+                    case 'home':
+                        // Home 功能：可以通过特定接口或手势实现
+                        endpoint = '/api/s3/swipe';
+                        Object.assign(body, { 
+                            start_x: 0.5, start_y: 0.95, 
+                            end_x: 0.5, end_y: 0.5 
+                        });
+                        break;
+                    case 'back':
+                        // Back 功能：从左边缘滑动
+                        endpoint = '/api/s3/swipe';
+                        Object.assign(body, { 
+                            start_x: 0.05, start_y: 0.5, 
+                            end_x: 0.5, end_y: 0.5 
+                        });
+                        break;
+                    case 'swipe_up':
+                        endpoint = '/api/s3/swipe';
+                        Object.assign(body, { 
+                            start_x: 0.5, start_y: 0.8, 
+                            end_x: 0.5, end_y: 0.2 
+                        });
+                        break;
+                    case 'swipe_down':
+                        endpoint = '/api/s3/swipe';
+                        Object.assign(body, { 
+                            start_x: 0.5, start_y: 0.2, 
+                            end_x: 0.5, end_y: 0.8 
+                        });
+                        break;
+                    case 'swipe_left':
+                        endpoint = '/api/s3/swipe';
+                        Object.assign(body, { 
+                            start_x: 0.8, start_y: 0.5, 
+                            end_x: 0.2, end_y: 0.5 
+                        });
+                        break;
+                    case 'swipe_right':
+                        endpoint = '/api/s3/swipe';
+                        Object.assign(body, { 
+                            start_x: 0.2, start_y: 0.5, 
+                            end_x: 0.8, end_y: 0.5 
+                        });
+                        break;
+                    default:
+                        addLog('未知命令: ' + cmd, 'error');
+                        return;
+                }
+                
+                const res = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    addLog(`命令执行成功: ${cmd}`);
+                } else {
+                    addLog('命令失败: ' + (data.message || '未知错误'), 'error');
+                }
+            } catch (e) {
+                addLog('命令错误: ' + e.message, 'error');
+            }
+        }
+
+        async function sendTTS() {
+            if (!selectedDevice) return addLog('请先选择设备', 'warn');
+            
+            const text = document.getElementById('ttsText').value.trim();
+            if (!text) return addLog('请输入播报内容', 'warn');
+            
+            addLog(`发送TTS: ${text}`);
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/s3/tts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_ip: selectedDevice, text })
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    addLog('TTS 播报成功');
+                    document.getElementById('ttsText').value = '';
+                } else {
+                    addLog('TTS 失败: ' + (data.message || 'TTS 功能未实现'), 'warn');
+                }
+            } catch (e) {
+                addLog('TTS 错误: ' + e.message, 'error');
+            }
+        }
+        
+        function stopTTS() {
+            addLog('停止播报功能待实现', 'warn');
+        }
+    </script>
+</body>
+</html>

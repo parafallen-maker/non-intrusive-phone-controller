@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>功能测试</title>
+    <style>
+        body { font-family: Arial; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .section { background: white; padding: 20px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .section h2 { margin-top: 0; color: #333; }
+        .controls { display: flex; gap: 10px; flex-wrap: wrap; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        .log { background: #f9f9f9; border: 1px solid #ddd; padding: 15px; border-radius: 4px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        .log-entry { margin: 5px 0; padding: 5px; }
+        .log-entry.success { color: #28a745; }
+        .log-entry.error { color: #dc3545; }
+        .log-entry.info { color: #17a2b8; }
+        .device-ip { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; }
+        .device-ip input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; flex: 1; }
+        .status { padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .status.ok { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 AutoGLM-S3 功能测试</h1>
+        
+        <div class="section">
+            <h2>⚙️ 设置</h2>
+            <div class="device-ip">
+                <label>设备 IP:</label>
+                <input id="deviceIP" type="text" value="192.168.31.102" placeholder="192.168.x.x">
+                <button onclick="testConnection()">连接测试</button>
+            </div>
+            <div id="connectionStatus" class="status" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <h2>📷 1. 截图测试</h2>
+            <div class="controls">
+                <button onclick="testScreenshot()">获取截图</button>
+                <button onclick="testScreenshotWithRotation('0')">0° 截图</button>
+                <button onclick="testScreenshotWithRotation('1')">90° 截图</button>
+                <button onclick="testScreenshotWithRotation('3')">270° 截图</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>👆 2. 点击测试</h2>
+            <div class="controls">
+                <button onclick="testTap(0.5, 0.5)">中心点击</button>
+                <button onclick="testTap(0.2, 0.2)">左上点击</button>
+                <button onclick="testTap(0.8, 0.8)">右下点击</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>✌️ 3. 滑动测试</h2>
+            <div class="controls">
+                <button onclick="testSwipe(0.2, 0.5, 0.8, 0.5)">左右滑动</button>
+                <button onclick="testSwipe(0.5, 0.2, 0.5, 0.8)">上下滑动</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>⏳ 4. 长按测试</h2>
+            <div class="controls">
+                <button onclick="testLongPress(0.5, 0.5)">中心长按 (500ms)</button>
+                <button onclick="testLongPress(0.5, 0.5, 2000)">中心长按 (2s)</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🏠 5. 机械臂控制</h2>
+            <div class="controls">
+                <button class="danger" onclick="testHome()">归位到原点</button>
+                <button onclick="testStatus()">查询状态</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📊 测试日志</h2>
+            <div class="controls">
+                <button onclick="clearLog()">清空日志</button>
+            </div>
+            <div class="log" id="logConsole"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080';
+        
+        function log(message, type = 'info') {
+            const logConsole = document.getElementById('logConsole');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const time = new Date().toLocaleTimeString();
+            entry.textContent = `[${time}] ${message}`;
+            logConsole.appendChild(entry);
+            logConsole.scrollTop = logConsole.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('logConsole').innerHTML = '';
+        }
+
+        function getDeviceIP() {
+            return document.getElementById('deviceIP').value || '192.168.31.102';
+        }
+
+        async function testConnection() {
+            const deviceIP = getDeviceIP();
+            log(`🔗 连接测试: ${deviceIP}...`, 'info');
+            try {
+                const res = await fetch(`${API_BASE}/api/s3/status?device_ip=${deviceIP}`);
+                const data = await res.json();
+                const status = document.getElementById('connectionStatus');
+                if (data.success) {
+                    log(`✓ 连接成功 - ${data.data.system_state}`, 'success');
+                    status.className = 'status ok';
+                    status.innerHTML = `✓ 设备连接正常 (状态: ${data.data.system_state})`;
+                } else {
+                    log(`✗ 连接失败: ${data.error || data.message}`, 'error');
+                    status.className = 'status error';
+                    status.innerHTML = `✗ 连接失败`;
+                }
+                status.style.display = 'block';
+            } catch (e) {
+                log(`✗ 错误: ${e.message}`, 'error');
+            }
+        }
+
+        async function testScreenshot(rotation = '3') {
+            const deviceIP = getDeviceIP();
+            log(`📷 获取截图 (旋转=${rotation}×90°)...`, 'info');
+            try {
+                const res = await fetch(`${API_BASE}/api/s3/screenshot`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_ip: deviceIP, rotation: parseInt(rotation) })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    log(`✓ 截图成功: ${data.path}`, 'success');
+                } else {
+                    log(`✗ 截图失败: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                log(`✗ 错误: ${e.message}`, 'error');
+            }
+        }
+
+        function testScreenshotWithRotation(rot) {
+            testScreenshot(rot);
+        }
+
+        async function testTap(x, y) {
+            const deviceIP = getDeviceIP();
+            log(`👆 点击 (${x.toFixed(2)}, ${y.toFixed(2)})...`, 'info');
+            try {
+                const res = await fetch(`${API_BASE}/api/s3/tap`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_ip: deviceIP, x, y, count: 1 })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    log(`✓ 点击成功`, 'success');
+                } else {
+                    log(`✗ 点击失败: ${data.message}`, 'error');
+                }
+            } catch (e) {
+                log(`✗ 错误: ${e.message}`, 'error');
+            }
+        }
+
+        async function testSwipe(sx, sy, ex, ey) {
+            const deviceIP = getDeviceIP();
+            log(`↔️ 滑动 (${sx},${sy}) → (${ex},${ey})...`, 'info');
+            try {
+                const res = await fetch(`${API_BASE}/api/s3/swipe`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_ip: deviceIP, start_x: sx, start_y: sy, end_x: ex, end_y: ey })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    log(`✓ 滑动成功`, 'success');
+                } else {
+                    log(`✗ 滑动失败: ${data.message}`, 'error');
+                }
+            } catch (e) {
+                log(`✗ 错误: ${e.message}`, 'error');
+            }
+        }
+
+        async function testLongPress(x, y, duration = 500) {
+            const deviceIP = getDeviceIP();
+            log(`⏳ 长按 (${x},${y}) ${duration}ms...`, 'info');
+            try {
+                const res = await fetch(`${API_BASE}/api/s3/long_press`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_ip: deviceIP, x, y, duration })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    log(`✓ 长按成功`, 'success');
+                } else {
+                    log(`✗ 长按失败: ${data.message}`, 'error');
+                }
+            } catch (e) {
+                log(`✗ 错误: ${e.message}`, 'error');
+            }
+        }
+
+        async function testHome() {
+            const deviceIP = getDeviceIP();
+            log(`🏠 机械臂归位 (移动到 0,0)...`, 'info');
+            try {
+                const res = await fetch(`${API_BASE}/api/s3/execute`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        device_ip: deviceIP,
+                        command: { command_type: 'home', params: {} }
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    log(`✓ 归位成功`, 'success');
+                } else {
+                    log(`✗ 归位失败: ${data.message}`, 'error');
+                }
+            } catch (e) {
+                log(`✗ 错误: ${e.message}`, 'error');
+            }
+        }
+
+        async function testStatus() {
+            const deviceIP = getDeviceIP();
+            log(`📊 查询设备状态...`, 'info');
+            try {
+                const res = await fetch(`${API_BASE}/api/s3/status?device_ip=${deviceIP}`);
+                const data = await res.json();
+                if (data.success) {
+                    const info = data.data;
+                    log(`✓ 状态查询成功`, 'success');
+                    log(`  - 设备: ${info.device_id}`, 'info');
+                    log(`  - 状态: ${info.system_state}`, 'info');
+                    log(`  - WiFi: ${info.wifi_rssi} dBm`, 'info');
+                    log(`  - 运行时间: ${info.state_duration}s`, 'info');
+                } else {
+                    log(`✗ 状态查询失败: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                log(`✗ 错误: ${e.message}`, 'error');
+            }
+        }
+
+        // 页面加载时自动测试连接
+        window.onload = () => {
+            log('🚀 测试页面已加载', 'info');
+            log('💡 点击"连接测试"开始', 'info');
+        };
+    </script>
+</body>
+</html>
