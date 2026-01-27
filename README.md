@@ -2,35 +2,47 @@
 
 基于**语义容器架构**的物理Agent系统，实现 Brain (LLM) + Tactical (AutoGLM) + Hardware 的双脑协作。
 
+> 🎉 **v1.0 发布** - 所有核心模块已完成，集成测试 5/5 通过！
+
 ## 🎯 项目特点
 
 - **双脑架构**：战略层LLM生成Python逻辑代码，战术层AutoGLM处理视觉感知与执行
 - **多硬件支持**：统一驱动抽象层，支持串口机械臂和WiFi/ESP32-S3
 - **安全第一**：`@safe_guard` 装饰器实施物理边界检查，防止危险动作
 - **Code as Action**：逻辑与执行完全解耦，LLM只写业务流程
+- **视觉禁令**：LLM生成的代码禁止包含坐标/颜色，全部由战术层视觉处理
+- **技能记忆**：自动蒸馏执行轨迹为可复用技能
 
 ## 📁 项目结构
 
 ```
 semantic-agent/
-├── drivers/              # 硬件驱动层 (Task 1.1 完成)
-│   ├── base_driver.py   # 抽象基类 + @safe_guard + SafetyError
-│   ├── serial_driver.py # 串口驱动 (GRBL)
-│   ├── wifi_driver.py   # WiFi驱动 (ESP32-S3)
+├── drivers/                  # 硬件驱动层 ✅
+│   ├── base_driver.py       # 抽象基类 + @safe_guard + SafetyError
+│   ├── serial_driver.py     # 串口驱动 (GRBL)
+│   ├── wifi_driver.py       # WiFi驱动 (ESP32-S3)
 │   └── __init__.py
-├── tactical/            # 战术层 (AutoGLM)
-│   ├── autoglm_client.py
-│   ├── action_translator.py
-│   ├── execution_engine.py
+├── tactical/                 # 战术层 ✅
+│   ├── vision_adapter.py    # VisionAdapter + MicroAction
+│   ├── micro_loop.py        # 感知-决策-执行-验证闭环
+│   ├── autoglm_client.py    # AutoGLM 客户端
+│   ├── action_translator.py # 动作翻译
+│   ├── execution_engine.py  # 执行引擎
 │   └── models.py
-├── runtime/             # 运行时容器 (待实现)
-│   └── task_runtime.py  # 沙盒执行环境
-├── skills/              # 技能系统 (待实现)
-│   ├── skill_registry.py
-│   └── skill_distiller.py
-├── static/              # Web 前端
-├── main.py              # FastAPI 服务器
-├── config.py            # 配置管理
+├── runtime/                  # 运行时容器 ✅
+│   ├── task_runtime.py      # 沙盒执行环境 (exec + step注入)
+│   ├── planner.py           # LLM代码生成器 (多提供商)
+│   └── prompts.py           # System Prompt (视觉禁令)
+├── skills/                   # 技能系统 ✅
+│   ├── skill_registry.py    # 技能注册表 (存储/搜索)
+│   └── skill_distiller.py   # 技能蒸馏器 (轨迹→参数化代码)
+├── tests/                    # 测试 ✅
+│   └── test_integration.py  # 集成测试 (5/5 通过)
+├── gui/                      # 桌面GUI
+│   └── motor_control_gui.py # Tkinter控制面板
+├── static/                   # Web 前端
+├── main.py                   # FastAPI 服务器
+├── config.py                 # 配置管理
 └── requirements.txt
 ```
 
@@ -42,12 +54,24 @@ pip install -r requirements.txt
 
 # 配置环境变量
 cp .env.example .env
-# 编辑 .env 填入 ZHIPU_API_KEY
+# 编辑 .env 填入 ZHIPU_API_KEY (可选，用于真实LLM调用)
 ```
 
-## 🚀 使用
+## 🚀 快速开始
 
-### 1. 启动 Web 服务
+### 1. 运行集成测试
+
+```bash
+python tests/test_integration.py
+```
+
+预期输出：
+```
+🎉 所有集成测试通过!
+总计: 5/5 通过
+```
+
+### 2. 启动 Web 服务
 
 ```bash
 python main.py
@@ -55,54 +79,88 @@ python main.py
 
 访问 http://localhost:8000
 
-### 2. Python API 使用
+### 3. 完整使用示例
 
 ```python
-from drivers import WiFiDriver, SerialDriver, MockDriver
+from runtime.planner import Planner
+from runtime.task_runtime import TaskRuntime
+from tactical.micro_loop import execute_step
+from drivers import WiFiDriver
 
-# WiFi 驱动 (ESP32-S3)
+# 1. 初始化
 driver = WiFiDriver(device_ip="192.168.1.100")
 driver.connect()
-driver.tap(0.5, 0.5)  # 点击屏幕中心
-driver.swipe(0.2, 0.8, 0.8, 0.2)  # 滑动
-driver.screenshot()  # 截图
 
-# 串口驱动 (GRBL)
-driver = SerialDriver(port="COM3")
-driver.connect()
-driver.tap(0.5, 0.5)
+planner = Planner(provider='mock')  # 或 'zhipu'/'openai'
 
-# Mock 驱动 (测试)
-driver = MockDriver()
-driver.connect()
-driver.tap(0.5, 0.5)  # 只记录日志，不执行
+# 2. 用户指令 → Python代码
+result = planner.plan("给微信朋友圈前3条点赞")
+print(result.code)
+# step("打开微信")
+# step("点击发现")
+# step("点击朋友圈")
+# for i in range(3):
+#     step(f"点击第{i+1}条朋友圈的点赞按钮")
+
+# 3. 执行代码（每个step触发战术层闭环）
+def step(goal: str):
+    execute_step(goal, driver, vision_adapter)
+
+runtime = TaskRuntime(step_function=step)
+runtime.execute(result.code)
 ```
 
-### 3. 安全检查测试
+### 4. 技能系统
 
 ```python
-from drivers import SafetyError
+from skills.skill_registry import SkillRegistry
+from skills.skill_distiller import SkillDistiller, ExecutionTrace
 
-try:
-    driver.tap(1.5, 0.5)  # 超出边界
-except SafetyError as e:
-    print(f"被阻止: {e}")
+# 蒸馏执行轨迹为可复用技能
+trace = ExecutionTrace(
+    instruction="给微信朋友圈前3条点赞",
+    code=result.code,
+    steps=runtime.executed_steps,
+    success=True
+)
+
+distiller = SkillDistiller()
+skill = distiller.distill(trace)
+# skill.code 自动参数化为 for i in range(count): ...
+
+# 注册技能
+registry = SkillRegistry()
+registry.register(
+    name=skill.name,
+    description=skill.description,
+    code=skill.code,
+    tags=skill.tags
+)
+
+# 搜索技能
+skills = registry.search("朋友圈点赞")
 ```
 
-## ✅ 已完成 (Phase 1-5)
+## ✅ 已完成
 
-- [x] **Task 1.1**: 安全层 (`@safe_guard` + `SafetyError`)
-- [x] **Task 1.2**: 驱动抽象 (`BaseDriver`, `SerialDriver`, `WiFiDriver`)
-- [x] 战术层移植 (AutoGLM集成)
-- [x] Web API 移植
-- [x] 多硬件后端支持
+| 任务 | 模块 | 描述 |
+|------|------|------|
+| Task 1.1 | `drivers/base_driver.py` | 安全层 (`@safe_guard` + `SafetyError`) |
+| Task 1.2 | `tactical/vision_adapter.py` | VisionAdapter + MicroAction 结构化输出 |
+| Task 2.1 | `tactical/micro_loop.py` | 微观闭环 (感知→决策→执行→验证) |
+| Task 3.1 | `runtime/task_runtime.py` | 沙盒执行器 (`exec()` + `step()` 注入) |
+| Task 4.1 | `runtime/prompts.py` | System Prompt (视觉禁令) |
+| Task 4.2 | `runtime/planner.py` | LLM代码生成器 (支持 zhipu/openai/anthropic) |
+| Task 5.1 | `skills/skill_registry.py` | 技能注册表 (存储/搜索/导出) |
+| Task 5.2 | `skills/skill_distiller.py` | 技能蒸馏器 (轨迹→参数化代码) |
+| Task 6.1 | `tests/test_integration.py` | 集成测试 (5/5 通过) |
 
-## 🔜 待实现
+## 🔜 路线图
 
-- [ ] **Task 2.1**: 微观闭环 (`execute_step` with verify)
-- [ ] **Task 3.1**: 运行时沙盒 (`TaskRuntime` + `exec()`)
-- [ ] **Task 4**: 战略层 LLM (GPT-4/Claude 生成代码)
-- [ ] **Task 5**: 技能系统 (保存/检索/蒸馏)
+- [ ] 向量数据库技能检索 (Chroma/Pinecone)
+- [ ] 多轮对话上下文
+- [ ] 异常恢复策略
+- [ ] 真机端到端测试
 
 ## 📝 核心概念
 
@@ -111,20 +169,58 @@ except SafetyError as e:
 ```
 用户指令 "给前3条朋友圈点赞"
     ↓
-Brain (GPT-4): 生成 Python 代码
-    for i in range(3):
-        step("点击第{}个点赞按钮".format(i))
+┌─────────────────────────────────────────┐
+│  Brain (Planner + GPT-4/Claude/GLM)     │
+│  生成 Python 代码（只有语义，无坐标）     │
+│                                         │
+│  for i in range(3):                     │
+│      step("点击第{}条的点赞".format(i))  │
+└─────────────────────────────────────────┘
     ↓
-Runtime: 执行代码，调用 step()
+┌─────────────────────────────────────────┐
+│  Runtime (TaskRuntime)                  │
+│  沙盒执行代码，拦截 step() 调用          │
+└─────────────────────────────────────────┘
     ↓
-Tactical (AutoGLM): 每个 step() 触发
-    1. Capture: 截图
-    2. Predict: AutoGLM 推理动作
-    3. Act: 驱动机械臂
-    4. Verify: 再次截图确认
+┌─────────────────────────────────────────┐
+│  Tactical (MicroLoop + VisionAdapter)   │
+│  每个 step() 触发闭环:                   │
+│  1. Capture: 截图                       │
+│  2. Predict: AutoGLM 推理动作+坐标       │
+│  3. Act: 驱动硬件执行                    │
+│  4. Verify: 再次截图确认完成             │
+└─────────────────────────────────────────┘
     ↓
-Hardware: 物理执行 (带 @safe_guard 保护)
+┌─────────────────────────────────────────┐
+│  Hardware (BaseDriver + @safe_guard)    │
+│  物理执行，边界检查保护                  │
+└─────────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────────┐
+│  Skills (Registry + Distiller)          │
+│  执行轨迹 → 蒸馏 → 参数化技能 → 存储     │
+└─────────────────────────────────────────┘
 ```
+
+### 视觉禁令 (核心设计原则)
+
+**Brain 层生成的代码禁止包含:**
+- ❌ 屏幕坐标 `(x, y)`
+- ❌ 像素颜色 `#RRGGBB`
+- ❌ 图像处理逻辑
+
+**只允许语义描述:**
+```python
+# ✅ 正确
+step("点击微信图标")
+step("向下滑动")
+
+# ❌ 错误
+tap(0.5, 0.3)
+click_at(100, 200)
+```
+
+这样 Brain 生成的代码可以跨设备、跨分辨率复用！
 
 ### 安全守卫
 
