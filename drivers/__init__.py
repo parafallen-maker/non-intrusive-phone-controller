@@ -8,8 +8,16 @@
 """
 
 from .base_driver import BaseDriver, SafetyError, safe_guard, MockDriver
-from .serial_driver import SerialDriver
-from .wifi_driver import WiFiDriver
+
+# 延迟导入 SerialDriver 和 WiFiDriver，避免依赖问题
+def __getattr__(name):
+    if name == 'SerialDriver':
+        from .serial_driver import SerialDriver
+        return SerialDriver
+    elif name == 'WiFiDriver':
+        from .wifi_driver import WiFiDriver
+        return WiFiDriver
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     'BaseDriver',

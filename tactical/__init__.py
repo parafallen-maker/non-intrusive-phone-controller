@@ -2,19 +2,21 @@
 战术层模块 - AutoGLM 感知决策执行
 
 包含:
-- AutoGLMClient: 视觉AI客户端
-- ActionTranslator: 动作翻译器
-- ExecutionEngine: 执行引擎
-- 数据模型
+- AutoGLMDriver: 新的三层架构驱动
+- VisionAdapter: 视觉适配器
 """
 
-from .autoglm_client import AutoGLMClient
-from .action_translator import ActionTranslator
-from .execution_engine import ExecutionEngine
-from .models import *
+# 延迟导入，避免循环依赖
+def __getattr__(name):
+    if name == 'AutoGLMDriver':
+        from .autoglm_driver import AutoGLMDriver
+        return AutoGLMDriver
+    elif name == 'VisionAdapter':
+        from .vision_adapter import VisionAdapter
+        return VisionAdapter
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
-    'AutoGLMClient',
-    'ActionTranslator',
-    'ExecutionEngine',
+    'AutoGLMDriver',
+    'VisionAdapter',
 ]
