@@ -156,22 +156,25 @@ class ActionTranslator:
     def _handle_type(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle Type action
         
-        Note: S3 doesn't support typing directly, need to use ADB or manual input
-        This will be logged as a manual intervention requirement
+        通过语音输入实现文字输入:
+        1. 点击语音输入按钮
+        2. TTS 播放文字
+        3. 手机 STT 识别
         
         Args:
             params: {'text': str}
             
         Returns:
-            Manual action params
+            Voice input action params
         """
         text = params.get('text', '')
         
         return {
-            'action': 'manual_type',
+            'action': 'voice_type',
             'params': {
                 'text': text,
-                'note': 'Manual intervention required: S3 does not support text input. Use ADB or manual typing.'
+                'method': 'tts_stt',  # TTS播放 + STT识别
+                'note': '使用语音输入: 点击麦克风 → TTS播放 → 等待识别'
             }
         }
     

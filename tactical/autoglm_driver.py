@@ -6,7 +6,11 @@ AutoGLM Driver - The Hand-Eye Coordinator
 持有 Camera 和 RoboticArm 的实例，实现微观闭环：
 截图 → AutoGLM 规划 → 机械臂执行 → 验证 → 重试
 
-核心方法: execute_step(goal: str) -> bool
+核心方法: execute_step(goal: str, expect: str = None) -> StepResult
+
+增强接口（支持 Long-horizon Planning）:
+- ask(question: str) -> str: 询问当前界面状态
+- checkpoint(description: str) -> bool: 验证检查点
 """
 
 import os
@@ -15,7 +19,7 @@ import time
 import base64
 import logging
 from typing import Optional, Dict, Any, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 # 添加项目路径
@@ -29,6 +33,37 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+# ==================== StepResult 数据类 ====================
+
+@dataclass
+class StepResult:
+    """单步执行结果
+    
+    用于向策略层反馈执行状态，支持 Long-horizon Planning
+    
+    Attributes:
+        success: 是否成功完成目标
+        state: 当前界面状态描述（用于 LLM 判断下一步）
+        has_more: 是否还有更多项目需要处理（用于循环控制）
+        error: 错误信息（如果失败）
+        retries: 重试次数
+    """
+    success: bool
+    state: str = ""
+    has_more: bool = False
+    error: Optional[str] = None
+    retries: int = 0
+    
+    def __bool__(self) -> bool:
+        """允许直接用 if step_result: 判断成功"""
+        return self.success
+    
+    def __str__(self) -> str:
+        status = "✅" if self.success else "❌"
+        state_preview = self.state[:50] + "..." if len(self.state) > 50 else self.state
+        return f"StepResult({status} state='{state_preview}' has_more={self.has_more})"
 
 
 class ActionType(Enum):
@@ -129,14 +164,15 @@ class AutoGLMDriver:
         except Exception as e:
             logger.error(f"[AutoGLMDriver] ❌ 客户端初始化失败: {e}")
     
-    def execute_step(self, goal: str) -> bool:
+    def execute_step(self, goal: str, expect: str = None) -> StepResult:
         """执行单步操作 - 微观闭环
         
         Args:
             goal: 语义目标描述（如"点击搜索框"）
+            expect: 期望的结果状态描述（可选，用于验证）
             
         Returns:
-            bool: 成功返回 True，失败返回 False
+            StepResult: 包含执行状态和界面描述的结果对象
             
         Raises:
             SafetyError: 安全检查失败
@@ -147,11 +183,17 @@ class AutoGLMDriver:
         
         logger.info("=" * 60)
         logger.info(f"[AutoGLMDriver] 步骤 #{step_id}: {goal}")
+        if expect:
+            logger.info(f"[AutoGLMDriver] 期望: {expect}")
         logger.info("=" * 60)
+        
+        retries_used = 0
+        last_state = ""
         
         for attempt in range(self.max_retries):
             if attempt > 0:
                 self.total_retries += 1
+                retries_used = attempt
                 logger.warning(f"[AutoGLMDriver] 🔄 重试 {attempt}/{self.max_retries-1}")
             
             try:
@@ -190,11 +232,23 @@ class AutoGLMDriver:
                     logger.error("[AutoGLMDriver] ❌ 验证截图失败")
                     continue
                 
-                verified = self._call_autoglm_verify(new_screenshot, goal)
+                # 使用 expect 或 goal 进行验证
+                verify_target = expect if expect else goal
+                verified, state_desc = self._call_autoglm_verify_with_state(
+                    new_screenshot, verify_target
+                )
+                last_state = state_desc
                 
                 if verified:
                     logger.info(f"[AutoGLMDriver] ✅ 步骤 #{step_id} 完成!")
-                    return True
+                    # 检查是否还有更多项目
+                    has_more = self._check_has_more(new_screenshot, goal)
+                    return StepResult(
+                        success=True,
+                        state=state_desc,
+                        has_more=has_more,
+                        retries=retries_used
+                    )
                 else:
                     logger.warning(f"[AutoGLMDriver] ⚠️ 验证失败，准备重试")
                     continue
@@ -205,12 +259,22 @@ class AutoGLMDriver:
             except Exception as e:
                 logger.error(f"[AutoGLMDriver] ❌ 执行异常: {e}")
                 if attempt == self.max_retries - 1:
-                    raise MaxRetryError(f"步骤 '{goal}' 达到最大重试次数") from e
+                    return StepResult(
+                        success=False,
+                        state=last_state,
+                        error=str(e),
+                        retries=retries_used
+                    )
                 continue
         
         # 所有重试都失败
         logger.error(f"[AutoGLMDriver] ❌ 步骤 #{step_id} 失败，已重试 {self.max_retries} 次")
-        raise MaxRetryError(f"步骤 '{goal}' 失败")
+        return StepResult(
+            success=False,
+            state=last_state,
+            error=f"步骤 '{goal}' 达到最大重试次数",
+            retries=retries_used
+        )
     
     def _call_autoglm_plan(self, screenshot: bytes, goal: str) -> Optional[AutoGLMAction]:
         """调用 AutoGLM API 进行规划
@@ -343,6 +407,273 @@ class AutoGLMDriver:
             # 验证失败时保守处理，返回 False
             return False
     
+    def _call_autoglm_verify_with_state(
+        self, screenshot: bytes, goal: str
+    ) -> Tuple[bool, str]:
+        """验证操作结果并返回状态描述
+        
+        Args:
+            screenshot: 当前截图
+            goal: 验证目标
+            
+        Returns:
+            (是否成功, 状态描述)
+        """
+        if not self.client:
+            # Mock 模式
+            logger.warning("[AutoGLMDriver] Mock 模式，验证通过")
+            return True, "Mock: 操作成功完成，界面显示正常"
+        
+        image_b64 = base64.b64encode(screenshot).decode('utf-8')
+        
+        system_prompt = (
+            "你是一个验证助手。\n"
+            "1. 判断操作目标 '{goal}' 是否已完成\n"
+            "2. 用一句话描述当前界面状态\n\n"
+            "输出格式:\n"
+            "结果: YES/NO\n"
+            "状态: <当前界面的简短描述>"
+        )
+        
+        messages = [
+            {"role": "system", "content": system_prompt.format(goal=goal)},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}
+                    },
+                    {
+                        "type": "text",
+                        "text": f"请验证: '{goal}'"
+                    }
+                ]
+            }
+        ]
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.1,
+                max_tokens=300
+            )
+            
+            content = response.choices[0].message.content.strip()
+            logger.debug(f"[AutoGLMDriver] 验证响应: {content}")
+            
+            # 解析结果
+            success = 'YES' in content.upper() or '成功' in content or '完成' in content
+            
+            # 提取状态描述
+            state_desc = "界面状态未知"
+            if '状态:' in content:
+                state_desc = content.split('状态:')[-1].strip()
+            elif '\n' in content:
+                state_desc = content.split('\n')[-1].strip()
+            else:
+                state_desc = content
+            
+            logger.info(f"[AutoGLMDriver] 验证: {'✅' if success else '❌'} | 状态: {state_desc}")
+            return success, state_desc
+            
+        except Exception as e:
+            logger.error(f"[AutoGLMDriver] 验证 API 错误: {e}")
+            return False, f"验证失败: {e}"
+    
+    def _check_has_more(self, screenshot: bytes, context: str) -> bool:
+        """检查是否还有更多项目需要处理
+        
+        用于支持循环操作的终止判断
+        
+        Args:
+            screenshot: 当前截图
+            context: 上下文描述
+            
+        Returns:
+            bool: 是否还有更多项目
+        """
+        if not self.client:
+            # Mock 模式，假设没有更多
+            return False
+        
+        image_b64 = base64.b64encode(screenshot).decode('utf-8')
+        
+        system_prompt = (
+            "分析当前界面，判断是否还有更多项目需要处理。\n"
+            f"操作上下文: {context}\n\n"
+            "只回答: YES (还有更多) 或 NO (没有更多)"
+        )
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}
+                    },
+                    {
+                        "type": "text",
+                        "text": "是否还有更多项目需要处理？"
+                    }
+                ]
+            }
+        ]
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.1,
+                max_tokens=50
+            )
+            
+            content = response.choices[0].message.content.strip().upper()
+            has_more = 'YES' in content or '有' in content
+            logger.debug(f"[AutoGLMDriver] has_more: {has_more}")
+            return has_more
+            
+        except Exception as e:
+            logger.error(f"[AutoGLMDriver] has_more 检查失败: {e}")
+            return False
+    
+    def ask(self, question: str) -> str:
+        """询问当前界面状态（支持 Long-horizon Planning）
+        
+        让策略层能够动态查询界面，做出判断
+        
+        Args:
+            question: 问题（如"当前显示的是什么页面？"）
+            
+        Returns:
+            str: 答案描述
+            
+        Example:
+            >>> answer = driver.ask("屏幕上显示多少张照片？")
+            >>> if "0" in answer:
+            ...     print("没有照片了")
+        """
+        logger.info(f"[AutoGLMDriver] 📝 Ask: {question}")
+        
+        screenshot = self.driver.screenshot()
+        if screenshot is None:
+            return "错误：无法获取截图"
+        
+        if not self.client:
+            # Mock 模式
+            return f"Mock 回答: 关于 '{question}' 的答案"
+        
+        image_b64 = base64.b64encode(screenshot).decode('utf-8')
+        
+        messages = [
+            {
+                "role": "system",
+                "content": "你是一个界面分析助手。根据截图回答用户问题，简洁准确。"
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}
+                    },
+                    {
+                        "type": "text",
+                        "text": question
+                    }
+                ]
+            }
+        ]
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=200
+            )
+            
+            answer = response.choices[0].message.content.strip()
+            logger.info(f"[AutoGLMDriver] 📝 Answer: {answer}")
+            return answer
+            
+        except Exception as e:
+            logger.error(f"[AutoGLMDriver] ask API 错误: {e}")
+            return f"查询失败: {e}"
+    
+    def checkpoint(self, description: str) -> bool:
+        """验证当前界面是否符合检查点描述（支持 Long-horizon Planning）
+        
+        用于在循环中验证状态，决定是否继续
+        
+        Args:
+            description: 期望的状态描述（如"还有照片需要删除"）
+            
+        Returns:
+            bool: 当前界面是否符合描述
+            
+        Example:
+            >>> while driver.checkpoint("还有照片需要删除"):
+            ...     driver.execute_step("删除第一张照片")
+        """
+        logger.info(f"[AutoGLMDriver] 🔍 Checkpoint: {description}")
+        
+        screenshot = self.driver.screenshot()
+        if screenshot is None:
+            logger.error("[AutoGLMDriver] 检查点：截图失败")
+            return False
+        
+        if not self.client:
+            # Mock 模式，默认返回 False（安全的选择）
+            logger.warning("[AutoGLMDriver] Mock 模式，checkpoint 返回 False")
+            return False
+        
+        image_b64 = base64.b64encode(screenshot).decode('utf-8')
+        
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是一个界面验证助手。\n"
+                    "判断当前界面是否符合用户的描述。\n"
+                    "只回答 YES 或 NO。"
+                )
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}
+                    },
+                    {
+                        "type": "text",
+                        "text": f"当前界面是否符合: '{description}'？"
+                    }
+                ]
+            }
+        ]
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.1,
+                max_tokens=50
+            )
+            
+            content = response.choices[0].message.content.strip().upper()
+            result = 'YES' in content or '是' in content or '符合' in content
+            logger.info(f"[AutoGLMDriver] 🔍 Checkpoint 结果: {'✅' if result else '❌'}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"[AutoGLMDriver] checkpoint API 错误: {e}")
+            return False
+
     def _parse_action(self, content: str) -> Optional[AutoGLMAction]:
         """解析 AutoGLM 响应中的操作
         

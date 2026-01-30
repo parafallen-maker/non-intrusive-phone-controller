@@ -3,6 +3,7 @@
 
 包含:
 - AutoGLMDriver: 新的三层架构驱动
+- StepResult: 步骤执行结果（支持 Long-horizon Planning）
 - VisionAdapter: 视觉适配器
 """
 
@@ -11,6 +12,9 @@ def __getattr__(name):
     if name == 'AutoGLMDriver':
         from .autoglm_driver import AutoGLMDriver
         return AutoGLMDriver
+    elif name == 'StepResult':
+        from .autoglm_driver import StepResult
+        return StepResult
     elif name == 'VisionAdapter':
         from .vision_adapter import VisionAdapter
         return VisionAdapter
@@ -18,5 +22,6 @@ def __getattr__(name):
 
 __all__ = [
     'AutoGLMDriver',
+    'StepResult',
     'VisionAdapter',
 ]
